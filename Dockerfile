@@ -14,7 +14,8 @@ RUN gradle build --no-daemon -x check
 FROM eclipse-temurin:21-jre-noble AS deploy
 
 ARG SCAT_REPO=https://github.com/fgsect/scat
-ARG SCAT_TAG=v2.1.2
+# v2.1.2
+ARG SCAT_TAG=646a764eb9fba4e2aa6ba0e847c1fd018853fc17
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="${PATH}:/scat/bin"
