@@ -13,7 +13,8 @@ RUN gradle build --no-daemon -x check
 
 FROM eclipse-temurin:21-jre-noble AS deploy
 
-ARG SCAT_TAG=7eac9c5bea705c1e145b4999430560f875ea1950
+ARG SCAT_REPO=https://github.com/fgsect/scat
+ARG SCAT_TAG=v2.1.2
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="${PATH}:/scat/bin"
@@ -21,14 +22,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN groupadd -r -g 2000 java && useradd -m -d /home/java/ -s /bin/bash -u 2000 -r -g java java \
     && apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y tshark python3 python3-venv --no-install-recommends \
+    && apt-get install -y git tshark python3 python3-venv --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /home/gradle/build/libs/*-all.jar /app/uecapabilityparser.jar
 
 # Install scat
+# scat >= 2.1.0 uses a hatch-vcs build backend that requires the git metadata
+# of the source tree, so install from a clone instead of a tarball
 RUN python3 -m venv /scat \
-    && /scat/bin/python -m pip install --no-cache-dir https://github.com/fgsect/scat/archive/${SCAT_TAG}.tar.gz
+    && git clone --filter=blob:none ${SCAT_REPO} /tmp/scat-src \
+    && git -C /tmp/scat-src checkout -q ${SCAT_TAG} \
+    && /scat/bin/python -m pip install --no-cache-dir /tmp/scat-src \
+    && rm -rf /tmp/scat-src
 
 USER java
 WORKDIR /home/java
