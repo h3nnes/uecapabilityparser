@@ -75,7 +75,10 @@ internal class TsharkTest {
     private fun normalizeCapabilityText(lines: List<String>): List<String> {
         return lines
             .dropLastWhile { it.isBlank() }
-            .mapNotNull {
+            .mapNotNull { rawLine ->
+                // tshark changes the indentation depth between versions, but the structure is
+                // what matters, so ignore leading whitespace.
+                val it = rawLine.trimStart()
                 if (
                     it.startsWith("DLT") ||
                         it.endsWith("…") ||
