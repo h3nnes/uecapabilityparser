@@ -94,7 +94,12 @@ object MtsAsn1Helpers {
         val idPdu = if (rat == Rat.EUTRA) "S1AP-PDU" else "NGAP-PDU"
         val jsonWriter = KotlinJsonFormatWriter()
 
-        getAsn1ApTranslator(rat).decode(idPdu, pdu.inputStream(), jsonWriter)
+        try {
+            getAsn1ApTranslator(rat).decode(idPdu, pdu.inputStream(), jsonWriter)
+        } catch (ex: Exception) {
+            System.err.println("Warning: Failed to decode $idPdu: ${ex.message}")
+            return null
+        }
 
         return jsonWriter.jsonNode
     }
@@ -111,7 +116,12 @@ object MtsAsn1Helpers {
         val jsonWriter = KotlinJsonFormatWriter()
         val translator = getAsn1Translator(rrc)
 
-        translator.decode("UL-DCCH-Message", data.inputStream(), jsonWriter)
+        try {
+            translator.decode("UL-DCCH-Message", data.inputStream(), jsonWriter)
+        } catch (ex: Exception) {
+            System.err.println("Warning: Failed to decode UL-DCCH-Message: ${ex.message}")
+            return null
+        }
 
         val path =
             "message.messageClassExtension.c2.ulDedicatedMessageSegment-r16.criticalExtensions" +
@@ -131,7 +141,12 @@ object MtsAsn1Helpers {
                 "message.c1.ueCapabilityInformation.criticalExtensions.ueCapabilityInformation.ue-CapabilityRAT-ContainerList"
             }
 
-        translator.decode("UL-DCCH-Message", data.inputStream(), jsonWriter)
+        try {
+            translator.decode("UL-DCCH-Message", data.inputStream(), jsonWriter)
+        } catch (ex: Exception) {
+            System.err.println("Warning: Failed to decode UL-DCCH-Message: ${ex.message}")
+            return null
+        }
 
         return jsonWriter.jsonNode?.getArrayAtPath(ratContainerListPath)
     }
@@ -142,7 +157,14 @@ object MtsAsn1Helpers {
         val jsonWriter = KotlinJsonFormatWriter()
         val translator = getAsn1Translator(rrc)
 
-        translator.decode("UERadioAccessCapabilityInformation", data.inputStream(), jsonWriter)
+        try {
+            translator.decode("UERadioAccessCapabilityInformation", data.inputStream(), jsonWriter)
+        } catch (ex: Exception) {
+            System.err.println(
+                "Warning: Failed to decode UERadioAccessCapabilityInformation: ${ex.message}"
+            )
+            return null
+        }
 
         val ratContainerListPath =
             if (rrc == Rat.NR) {
@@ -202,9 +224,14 @@ object MtsAsn1Helpers {
         val jsonWriter = KotlinJsonFormatWriter()
         val translator = getAsn1Translator(rat)
 
-        return buildJsonObject {
-            translator.decode(rat.ratCapabilityIdentifier, bytes.inputStream(), jsonWriter)
-            jsonWriter.jsonNode?.let { put(rat.toString(), it) }
+        return try {
+            buildJsonObject {
+                translator.decode(rat.ratCapabilityIdentifier, bytes.inputStream(), jsonWriter)
+                jsonWriter.jsonNode?.let { put(rat.toString(), it) }
+            }
+        } catch (ex: Exception) {
+            System.err.println("Warning: Failed to decode $rat capability: ${ex.message}")
+            JsonObject(emptyMap())
         }
     }
 

@@ -5,14 +5,16 @@
       "timestamp": 1707208873212,
       "description": "",
       "compressed": true,
-      "parserVersion": "nightly-2024-01-13"
+      "parserVersion": "nightly-2024-01-13",
+      "logType": "N"
     },
     {
       "id": "d5eafd82-153d-4301-a1a2-fa93c9c1de12",
       "timestamp": 1707208871878,
       "description": "",
       "compressed": true,
-      "parserVersion": "staging"
+      "parserVersion": "staging",
+      "logType": "O"
     }
   ],
   "multiItems": [
@@ -27,7 +29,11 @@
         "410a8c65-1f83-49b6-8b07-6831d195d712",
         "153bcaf5-a428-446a-9113-a999ac6e6209"
       ],
-      "compressed": true
+      "compressed": true,
+      "logType": "N",
+      "logTypes": [
+        "N"
+      ]
     }
   ]
 }

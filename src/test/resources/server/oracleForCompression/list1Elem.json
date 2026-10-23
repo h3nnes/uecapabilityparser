@@ -3,12 +3,13 @@
     {
       "id": "12a9cc86-e5d8-4d26-afd5-7d4d53e88b66",
       "timestamp": 1694460785223,
+      "description": "",
       "inputs": [
         "12a9cc86-e5d8-4d26-afd5-7d4d53e88b66-0"
       ],
-      "description": "",
       "compressed": true,
-      "parserVersion": "staging"
+      "parserVersion": "staging",
+      "logType": "W"
     }
   ]
 }

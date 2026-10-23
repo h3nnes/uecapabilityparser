@@ -9,6 +9,7 @@ import it.smartphonecombo.uecapabilityparser.extension.toInputSource
 import java.io.File
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -24,6 +25,7 @@ data class IndexLine(
     var inputs: List<String> = emptyList(),
     var compressed: Boolean = false,
     val parserVersion: String,
+    @SerialName("logType") var logType: String = "",
 ) {
     // This is only used to extract description from capabilities JSON
     private var metadata: MutableMap<String, String>? = null

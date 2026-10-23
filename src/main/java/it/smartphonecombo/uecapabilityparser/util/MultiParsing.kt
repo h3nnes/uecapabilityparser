@@ -120,6 +120,7 @@ class MultiParsing(
 
         val indexLines = parsingList.map { it.store(libraryIndex, path, compression) }
         val indexLineIds = indexLines.map(IndexLine::id)
+        val allLogTypes = indexLines.map { it.logType }.filter { it.isNotEmpty() }.distinct()
         val multiIndexLine =
             MultiIndexLine(
                 id,
@@ -127,6 +128,8 @@ class MultiParsing(
                 description,
                 indexLineIds,
                 compression,
+                logType = allLogTypes.firstOrNull() ?: "",
+                logTypes = allLogTypes,
             )
 
         val encodedString = Json.custom().encodeToString(multiIndexLine)

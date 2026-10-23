@@ -122,7 +122,32 @@ class LibraryIndex(outputCacheSize: Int?) {
             items.sortWith(compareBy<IndexLine>({ it.timestamp }, { it.id }).reversed())
             multiItems.sortWith(compareBy<MultiIndexLine>({ it.timestamp }, { it.id }).reversed())
 
-            val newImmutableIndex = LibraryIndexImmutable(items.toList(), multiItems.toList())
+            // Populate logType and logTypes for multiItems from referenced items
+            val multiItemsWithLogType =
+                multiItems.map { multiLine ->
+                    if (multiLine.indexLineIds.isNotEmpty()) {
+                        // Collect all unique log types from referenced items
+                        val allLogTypes =
+                            multiLine.indexLineIds
+                                .mapNotNull { itemId ->
+                                    items
+                                        .find { it.id == itemId }
+                                        ?.logType
+                                        ?.takeIf { it.isNotEmpty() }
+                                }
+                                .distinct()
+
+                        if (allLogTypes.isNotEmpty()) {
+                            multiLine.copy(logType = allLogTypes.first(), logTypes = allLogTypes)
+                        } else {
+                            multiLine
+                        }
+                    } else {
+                        multiLine
+                    }
+                }
+
+            val newImmutableIndex = LibraryIndexImmutable(items.toList(), multiItemsWithLogType)
             cachedImmutable = newImmutableIndex
 
             return newImmutableIndex

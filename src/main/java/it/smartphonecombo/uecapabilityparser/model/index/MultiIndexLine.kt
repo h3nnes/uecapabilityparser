@@ -14,6 +14,8 @@ data class MultiIndexLine(
     val description: String,
     val indexLineIds: List<String>,
     val compressed: Boolean = false,
+    val logType: String = "",
+    val logTypes: List<String> = emptyList(),
 ) {
     companion object {
         fun fromFile(multiIndexFile: File): MultiIndexLine {
