@@ -534,8 +534,16 @@ object ImportCapabilityInformation : ImportCapabilities {
                     band.bandwidths.map { bwsNr ->
                         val (scs, bwsDL, bwsUL) = bwsNr
                         if (scs == 30 || scs == 60) {
-                            val newBwsDL = bwsDL.takeIf(IntArray::isNotEmpty)?.plus(90)
-                            val newBwsUL = bwsUL.takeIf(IntArray::isNotEmpty)?.plus(90)
+                            /*
+                             * A band can only report 90MHz if it also supports 80MHz, see
+                             * TS 38.101-1 Table 5.3.5-1. This is a necessary but not sufficient
+                             * condition, so it only filters out the obvious nonsense.
+                             * Feature sets are band agnostic, so a 100MHz + channelBW-90mhz
+                             * feature set can be linked to a band whose channelBWs doesn't go
+                             * above 20MHz (e.g. n1), which must not gain 90MHz.
+                             */
+                            val newBwsDL = bwsDL.takeIf { it.any { bw -> bw >= 80 } }?.plus(90)
+                            val newBwsUL = bwsUL.takeIf { it.any { bw -> bw >= 80 } }?.plus(90)
                             newBwsDL?.sortDescending()
                             newBwsUL?.sortDescending()
 
