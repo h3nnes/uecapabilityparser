@@ -117,6 +117,7 @@ class Parsing(
                 inputsPath,
                 compression,
                 capabilities.parserVersion,
+                capabilities.logType.name,
             )
         libraryIndex?.putLine(indexLine)
         return indexLine

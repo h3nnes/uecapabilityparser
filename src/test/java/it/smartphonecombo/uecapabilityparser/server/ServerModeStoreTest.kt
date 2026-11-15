@@ -21,7 +21,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.junit.jupiter.api.AfterEach
@@ -126,6 +128,56 @@ internal class ServerModeStoreTest {
     fun listWithOneElement() {
         Config["store"] = "$resourcesPath/oracleForStore"
         getTest(endpointStore + "list", "$resourcesPath/oracleForStore/list1Elem.json")
+    }
+
+    @Test
+    fun listWithStoredElementHasLogType() {
+        Config["store"] = tmpStorePath
+        Config["cache"] = "0"
+        val input0 = "$resourcesPath/oracleForStore/input/$storedId-0"
+        val input1 = "$resourcesPath/oracleForStore/input/$storedId-1"
+        val input2 = "$resourcesPath/oracleForStore/input/$storedId-2"
+
+        JavalinTest.test(JavalinApp().newServer()) { _, client ->
+            dispatcher.scheduler.advanceUntilIdle()
+
+            val request = buildJsonArray {
+                addJsonObject {
+                    put("type", "H")
+                    putJsonArray("inputIndexes") {
+                        add(0)
+                        add(1)
+                        add(2)
+                    }
+                    putJsonArray("subTypes") {
+                        add("LTE")
+                        add("NR")
+                        add("ENDC")
+                    }
+                    put("description", "This is a test")
+                }
+            }
+            val storeResponse =
+                client.request(
+                    multiPartRequest(
+                        client.origin + endpointParse,
+                        request,
+                        listOf(input0, input1, input2),
+                    )
+                )
+            Assertions.assertEquals(HttpStatus.OK.code, storeResponse.code)
+
+            // The log type must be available without restarting the server, i.e. it can't
+            // rely on the index being populated from the stored files.
+            val listResponse = client.get(endpointStore + "list")
+            Assertions.assertEquals(HttpStatus.OK.code, listResponse.code)
+            val items =
+                Json.parseToJsonElement(listResponse.body?.string() ?: "")
+                    .jsonObject["items"]!!
+                    .jsonArray
+            val storedItem = items.single().jsonObject
+            Assertions.assertEquals("H", storedItem["logType"]!!.jsonPrimitive.content)
+        }
     }
 
     @Test
