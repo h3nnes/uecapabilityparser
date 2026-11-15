@@ -186,7 +186,8 @@ object MtsAsn1Helpers {
         val isNrCapInfo = data.isNrUeCapInfoPayload()
 
         if (!isLteCapInfo && !isNrCapInfo) {
-            return ratContainerToJson(defaultRat, data)
+            return ratContainerToJson(defaultRat, data, throwOnFailure = true)
+                ?: throw IllegalArgumentException("Failed to decode $defaultRat capability")
         }
 
         val rrc: Rat
@@ -207,18 +208,39 @@ object MtsAsn1Helpers {
             val ratType = Rat.of(ueCapContainer.getString("rat-Type"))
             val octetString = ueCapContainer.getString(octetStringKey)
             if (ratType != null && octetString != null) {
-                map += ratContainerToJson(ratType, octetString.decodeHex())
+                ratContainerToJson(ratType, octetString.decodeHex())?.let { map += it }
             }
         }
+
+        // Undecodable containers are skipped so that the remaining ones can still be parsed,
+        // but if every LTE/NR container failed the failure must not be hidden: callers would
+        // otherwise get an empty capability (and reparse would overwrite valid stored data).
+        val hasSupportedContainer =
+            ueCap.any {
+                when (Rat.of(it.getString("rat-Type"))) {
+                    Rat.EUTRA,
+                    Rat.EUTRA_NR,
+                    Rat.NR -> true
+                    else -> false
+                }
+            }
+        if (hasSupportedContainer && map.isEmpty()) {
+            throw IllegalArgumentException("Failed to decode UE capability containers")
+        }
+
         return JsonObject(map)
     }
 
     private fun getResourceAsStream(path: String): InputStream? =
         javaClass.getResourceAsStream(path)
 
-    private fun ratContainerToJson(rat: Rat, bytes: ByteArray): JsonObject {
+    private fun ratContainerToJson(
+        rat: Rat,
+        bytes: ByteArray,
+        throwOnFailure: Boolean = false,
+    ): JsonObject? {
         if (rat != Rat.EUTRA && rat != Rat.EUTRA_NR && rat != Rat.NR) {
-            return JsonObject(emptyMap())
+            return null
         }
 
         val jsonWriter = KotlinJsonFormatWriter()
@@ -231,7 +253,8 @@ object MtsAsn1Helpers {
             }
         } catch (ex: Exception) {
             System.err.println("Warning: Failed to decode $rat capability: ${ex.message}")
-            JsonObject(emptyMap())
+            if (throwOnFailure) throw ex
+            null
         }
     }
 
