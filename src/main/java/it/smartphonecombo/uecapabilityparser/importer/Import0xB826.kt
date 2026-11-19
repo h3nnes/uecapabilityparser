@@ -12,10 +12,12 @@ import it.smartphonecombo.uecapabilityparser.io.IOUtils.echoSafe
 import it.smartphonecombo.uecapabilityparser.io.InputSource
 import it.smartphonecombo.uecapabilityparser.model.BwClass
 import it.smartphonecombo.uecapabilityparser.model.Capabilities
+import it.smartphonecombo.uecapabilityparser.model.Duplex
 import it.smartphonecombo.uecapabilityparser.model.Mimo
 import it.smartphonecombo.uecapabilityparser.model.UplinkTxSwitchConfig
 import it.smartphonecombo.uecapabilityparser.model.UplinkTxSwitchOption
 import it.smartphonecombo.uecapabilityparser.model.UplinkTxSwitchType
+import it.smartphonecombo.uecapabilityparser.model.band.DuplexBandTable
 import it.smartphonecombo.uecapabilityparser.model.bandwidth.Bandwidth
 import it.smartphonecombo.uecapabilityparser.model.bandwidth.InvalidBandwidth
 import it.smartphonecombo.uecapabilityparser.model.bandwidth.toBandwidth
@@ -314,6 +316,7 @@ object Import0xB826 : ImportCapabilities {
 
         if (isNr) {
             val nrBand = component as ComponentNr
+            nrBand.scs = getDefaultScsFromBand(band)
             nrBand.maxBandwidthDl = getBWFromIndexV17(byte4.readNBits(6, offset = 2))
             nrBand.maxBandwidthUl = getBWFromIndexV17(byte5.readNBits(7, offset = 1))
         }
@@ -440,6 +443,9 @@ object Import0xB826 : ImportCapabilities {
             }
 
             if (version >= 22) {
+                // v22+ reuses the bits that used to hold the SCS index for the max bandwidth
+                // and no other SCS field has been identified, so we guess it from the band.
+                nrBand.scs = getDefaultScsFromBand(band)
                 val maxBWindex = byte3.readNBits(1, offset = 7).insert(byte4.readNBits(6), 1)
                 nrBand.maxBandwidthDl = getBWFromIndexV17(maxBWindex)
                 var maxBwIndexUl = byte4.readNBits(2, offset = 6).insert(byte5.readNBits(5), 2)
@@ -673,6 +679,19 @@ object Import0xB826 : ImportCapabilities {
     private fun getSCSFromIndex(index: Int): Int {
         val shiftAmount = index - 1
         return (1 shl shiftAmount) * 15
+    }
+
+    /**
+     * Return the max SCS typically reported by 0xB826 for a band: 120 kHz for FR2, 30 kHz for TDD
+     * bands and 15 kHz otherwise. It matches the values reported by versions < 22, which are the
+     * same for every component of a band.
+     */
+    private fun getDefaultScsFromBand(band: Int): Int {
+        return when {
+            band > 256 -> 120
+            DuplexBandTable.getNrDuplex(band) == Duplex.TDD -> 30
+            else -> 15
+        }
     }
 
     private fun parseUlTxSwitch(bytes: Int, offset: Int): UplinkTxSwitchConfig? {
