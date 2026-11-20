@@ -42,6 +42,9 @@ import java.io.InputStream
  */
 object Import0xB826 : ImportCapabilities {
 
+    /** Highest log version that is accepted by [isValidHeader]. */
+    private const val MAX_SANE_VERSION = 64
+
     /**
      * This parser take as [input] a [InputSource] of a 0xB826 (binary)
      *
@@ -59,6 +62,10 @@ object Import0xB826 : ImportCapabilities {
         val capabilities = Capabilities()
         var listCombo = emptyList<ICombo>()
         val stream = BufferedInputStream(input.inputStream())
+        var version = 0
+        var comboHeader: ComboHeader? = null
+        var numCombos = 0
+        var headerParsed = false
 
         try {
             val logSize =
@@ -68,7 +75,7 @@ object Import0xB826 : ImportCapabilities {
                 echoSafe("Log file size: $logSize bytes")
             }
 
-            val version = stream.readUShortLE()
+            version = stream.readUShortLE()
             capabilities.setMetadata("version", version)
             if (debug) {
                 echoSafe("Version $version\n")
@@ -76,7 +83,9 @@ object Import0xB826 : ImportCapabilities {
 
             stream.skipBytes(2)
 
-            val numCombos = getNumCombos(stream, version, capabilities)
+            comboHeader = getNumCombos(stream, version, capabilities)
+            numCombos = comboHeader.numCombos
+            headerParsed = true
             if (debug) {
                 echoSafe("Num Combos $numCombos\n")
             }
@@ -99,7 +108,29 @@ object Import0xB826 : ImportCapabilities {
         } catch (_: IOException) {
             // Do nothing
         }
+
         stream.close()
+        val header = comboHeader
+        if (header != null && !isValidHeader(version, header)) {
+            throw IllegalArgumentException(
+                "0xB826 header is not valid (version $version, " +
+                    "${header.numCombos} combos, total ${header.totalCombos}, " +
+                    "index ${header.index}). The payload is probably encrypted (e.g. an OrangeIP " +
+                    "secure log) or truncated, so it can't be parsed."
+            )
+        }
+
+        // A header that promises more combos than the payload contains means the
+        // payload isn't a valid 0xB826 log (encrypted or truncated). Note that
+        // valid SA logs can have a trailing padding array after the last combo,
+        // so leftover bytes alone aren't an error.
+        if (headerParsed && listCombo.size != numCombos) {
+            throw IllegalArgumentException(
+                "0xB826 payload ended after ${listCombo.size}/$numCombos combos. " +
+                    "The payload is probably encrypted (e.g. an OrangeIP secure log) or " +
+                    "truncated, so it can't be parsed."
+            )
+        }
 
         if (debug) {
             echoSafe(
@@ -139,15 +170,21 @@ object Import0xB826 : ImportCapabilities {
         return getSourceFromIndex(sourceIndex)
     }
 
+    private data class ComboHeader(val numCombos: Int, val totalCombos: Int?, val index: Int?)
+
     /**
      * Return the num of combos in this log. Also set index and totalCombos in [capabilities] if
      * available.
      */
-    private fun getNumCombos(stream: InputStream, version: Int, capabilities: Capabilities): Int {
+    private fun getNumCombos(
+        stream: InputStream,
+        version: Int,
+        capabilities: Capabilities,
+    ): ComboHeader {
         // Version < 3 only has the num of combos of this log
         // version > 3 also have the total combos of the series and the index of this specific log
         if (version <= 3) {
-            return stream.readUShortLE()
+            return ComboHeader(stream.readUShortLE(), null, null)
         }
 
         val totalCombos = stream.readUShortLE()
@@ -158,7 +195,22 @@ object Import0xB826 : ImportCapabilities {
             echoSafe("Total Numb Combos $totalCombos\n")
             echoSafe("Index $index\n")
         }
-        return stream.readUShortLE()
+        return ComboHeader(stream.readUShortLE(), totalCombos, index)
+    }
+
+    /**
+     * Check that the log header makes sense.
+     *
+     * Encrypted OrangeIP secure logs are random data, so they rarely produce a plausible version or
+     * a plausible set of combo counters.
+     */
+    private fun isValidHeader(version: Int, header: ComboHeader): Boolean {
+        if (version !in 1..MAX_SANE_VERSION) {
+            return false
+        }
+        val totalCombos = header.totalCombos ?: return true
+        val index = header.index ?: return true
+        return totalCombos >= header.numCombos && index + header.numCombos <= totalCombos
     }
 
     /** Parses a combo */

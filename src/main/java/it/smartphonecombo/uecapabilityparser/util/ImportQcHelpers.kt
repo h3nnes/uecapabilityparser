@@ -37,7 +37,26 @@ object ImportQcHelpers {
         return if (res == -1) length else res
     }
 
-    private fun splitHex(input: String): List<String> {
+    /** Matches the header of a QCAT message, e.g. "0xB826 NR5G RRC Supported CA Combos". */
+    private val regexQcItemHeader = Regex("""0x(B0CD|B826) {2}""")
+
+    /**
+     * A hex payload extracted from the input and, when the input is a QCAT text dump, the id of the
+     * log item it belongs to.
+     */
+    private class HexPayload(val hex: String, val qcItem: String?)
+
+    /**
+     * Return the id of the last QCAT log item header in this text, if any.
+     *
+     * It's used to tell apart the log items of a QCAT text dump that contains more than one type
+     * (e.g. 0xB0CD and 0xB826).
+     */
+    private fun String.lastQcItem(): String? {
+        return regexQcItemHeader.findAll(this).lastOrNull()?.groupValues?.get(1)
+    }
+
+    private fun splitHex(input: String): List<HexPayload> {
         // Try payload Prefix
         var splitByPrefix = input.split("Payload:")
         if (splitByPrefix.size == 1) {
@@ -54,11 +73,15 @@ object ImportQcHelpers {
         }
 
         return if (splitByPrefix.size > 1) {
-            splitByPrefix.drop(1).map {
-                it.substring(0, minOf(it.emptyLineIndex(), it.notHexLineIndex()))
+            splitByPrefix.drop(1).mapIndexed { index, it ->
+                // The text before a payload contains the header of the message it belongs to
+                HexPayload(
+                    hex = it.substring(0, minOf(it.emptyLineIndex(), it.notHexLineIndex())),
+                    qcItem = splitByPrefix[index].lastQcItem(),
+                )
             }
         } else {
-            input.split(regexEmptyOrCommentedLine)
+            input.split(regexEmptyOrCommentedLine).map { HexPayload(it, null) }
         }
     }
 
@@ -71,17 +94,46 @@ object ImportQcHelpers {
     }
 
     private fun parseMultipleQcDiag(input: String, lte: Boolean): Capabilities {
-        val inputArray = splitHex(input)
+        val qcItem = if (lte) "B0CD" else "B826"
+        val payloads = splitHex(input)
+        // A QCAT text dump can contain more than one log item type (e.g. 0xB0CD and 0xB826
+        // packets of the same capture): only parse the payloads of the requested item, the
+        // others would be decoded as garbage.
+        val inputArray =
+            payloads.filter { payload -> payload.qcItem == null || payload.qcItem == qcItem }
+        val otherItems = payloads.size - inputArray.size
         val list = mutableListWithCapacity<Capabilities>(inputArray.size)
         val importer = if (lte) Import0xB0CDBin else Import0xB826
-        for (it in inputArray) {
-            if (it.isBlank()) continue
+        val errors = mutableListWithCapacity<IllegalArgumentException>(0)
+        for (payload in inputArray) {
+            if (payload.hex.isBlank()) continue
             try {
-                val inputStream = it.preformatHex().decodeHex().toInputSource()
+                val inputStream = payload.hex.preformatHex().decodeHex().toInputSource()
                 list.add(importer.parse(inputStream))
             } catch (err: IllegalArgumentException) {
-                throw IllegalArgumentException("Invalid hexdump", err)
+                errors.add(err)
             }
+        }
+
+        if (list.isEmpty() && errors.isNotEmpty()) {
+            // Nothing could be parsed, report why instead of returning an empty result.
+            throw IllegalArgumentException(errors.first().message, errors.first())
+        }
+
+        if (list.isEmpty() && otherItems > 0) {
+            throw IllegalArgumentException(
+                "No 0x$qcItem payload found, the input only contains other log items"
+            )
+        }
+
+        if (errors.isNotEmpty()) {
+            // A capture can contain packets that aren't valid capabilities
+            // (e.g. encrypted OrangeIP secure logs): skip them, keep the rest.
+            echoSafe(
+                "Warning: skipped ${errors.size} invalid " +
+                    "${if (lte) "0xB0CD" else "0xB826"} payload(s): ${errors.first().message}",
+                err = true,
+            )
         }
 
         val lteCombos = if (lte) list.flatMap(Capabilities::lteCombos) else emptyList()
